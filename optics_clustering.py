@@ -22,13 +22,65 @@ today = datetime.datetime.now()
 CHICAGO = [102, 106, 274, 267, 130, 126, 278, 125, 127, 129, 105, 122, 268, 124, 123, 284, 285]
 CONTINENTAL_US = [ 'AL', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'DC', 'FM', 'FL', 'GA', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY' ]
 
+MID_WEST = ["IL", "IN", "IA", "KS", "MI", "MN", "MO", "NE", "OH", "WI"]
+
+ORIGIN_ZIPS = [
+    "23185","77029","63118","77571","80524","91406","43229","13027",
+    # All 301xx Georgia ZIPs
+    "30101","30102","30103","30104","30105","30106","30107","30108","30109",
+    "30110","30111","30112","30113","30114","30115","30116","30117","30118","30119",
+    "30120","30121","30122","30123","30124","30125","30126","30127","30129",
+    "30132","30133","30134","30135","30137","30138","30139",
+    "30140","30141","30142","30143","30144","30145","30146",
+    "30147","30148","30149","30150","30151","30152","30153",
+    "30154","30157","30160","30161","30162","30163","30164","30165","30168","30169",
+    "30170","30171","30172","30173","30175","30176","30177","30178","30179",
+    "30180","30182","30183","30184","30185","30187","30188","30189"
+]
+
+DESTINATION_ZIPS = [ 
+    "30082", "29673", "20878", "35401", "70501", "28732", "75235", "28054", "70809", "28269", "75428", "40218", "28602", "75002", "60609", "60005", "40004", "70360", "78045", "70447", "38654", "38606", "70003", "68801", "85031", "62025", "85225", "54656", "72202", "55904", "68507", "48174", "68025", "85713", "48203", "68138", "54701", "54751", "30071", "48706", "33916", "79915"
+]
+
+# missing_subset = [
+#   'AL', 'AR', 'CO', 'CT', 'DE', 'DC', 'ID', 'KY', 'LA', 'ME', 'MD', 
+#   'MA', 'MS', 'MT', 'NH', 'NJ', 'NM', 'NY', 'OK', 'OR', 'PA', 'RI', 
+#   'TN', 'TX', 'UT', 'VT', 'WA', 'WY'
+# ]
+
+ORIGIN_STATES = [
+    "GA",  # Georgia
+    "VA",  # Virginia
+    "TX",  # Texas
+    "MO",  # Missouri
+    "CO",  # Colorado
+    "CA",  # California
+    "OH",  # Ohio
+    "NY"   # New York
+]
+
+DESTINATION_STATES = [
+    "GA", "SC", "MD", "AL", "LA", "NC", "TX", "KY", "IL",
+    "MS", "NE", "AZ", "WI", "AR", "MN", "MI", "FL"
+]
+
+
 def pull_location_data():
 
     response = loadDb['v4loadDetail'].find({
         "PickupDate": {
-            "$gte": datetime.datetime(2024,7,1),
-            "$lte": datetime.datetime(2024,8,1)
+            "$gte": datetime.datetime(2024,9,12),
+            "$lte": datetime.datetime(2025,9,12)
         },
+        "OriginData.OriginState": { "$in" : ORIGIN_STATES },
+        "DestinationData.DestinationState": { "$in" : DESTINATION_STATES },
+
+        # "OriginData.OriginZip": { "$in" : ORIGIN_ZIPS },
+        # "DestinationData.DestinationZip": { "$in" : DESTINATION_ZIPS },
+
+        "OriginData.OriginCountry": "USA",
+        # "DestinationData.DestinationCountry": "USA",
+
         "LoadStatus": {
             "$in": ['Delivered', 'Dispatched', 'Planned']
         },
@@ -45,19 +97,22 @@ def pull_location_data():
             "$exists": True
         },
         "EquipmentType": {
-            "$eq": "Van"
+            "$in": ["Van", "Van or Reefer", "Reefer"]
         },
         "CustomerTerminalCode": {
             "$in": CHICAGO
         },
+        # "CustomerID": {
+        #     "$in": [2771, 7316, 9887]
+        # },
         "LoadSize": {
             "$eq": "FTL"
         },
         "RateData.GrossRevenue": {
-            "$gte": 250
+            "$gte": 200
         },
         "RateData.GrossTransCost": {
-            "$gte": 250
+            "$gte": 200
         }
     },
     {
@@ -80,9 +135,44 @@ def pull_location_data():
         "destination_longitude": "$DestinationData.DestinationLongitude"
     })
 
-    loads = []
-    for load in response:
-        loads.append(load)
+    # loads = []
+    # for load in response:
+    #     loads.append(load)
+
+    loads = [load for load in response]
+
+    # -------------------------------
+    # Optional: filter to specific lanes
+    # Just comment this block in/out as needed
+    # -------------------------------
+    LANES = [
+        ("CA","AZ"),
+        ("CO","NE"),
+        ("GA","AL"),
+        ("GA","FL"),
+        ("GA","GA"),
+        ("GA","MS"),
+        ("GA","NC"),
+        ("GA","SC"),
+        ("MO","IL"),
+        ("MO","KY"),
+        ("MO","MN"),
+        ("MO","WI"),
+        ("NY","MI"),
+        ("OH","IL"),
+        ("TX","AR"),
+        ("TX","LA"),
+        ("TX","TX"),
+        ("VA","GA"),
+        ("VA","MD"),
+    ]
+
+    # Keep only loads whose (origin_state, destination_state) match a lane
+    lane_set = set(LANES)
+    loads = [
+        l for l in loads
+        if (l["origin_state"], l["destination_state"]) in lane_set
+    ]
 
     #LOAD TO RIDE TRANSPORTATION LLC
     #CIRCLE LOGISTICS, INC.
@@ -107,6 +197,7 @@ def pull_location_data():
     #DC TRANSPORT INC
 
     loads = pd.DataFrame.from_dict(loads)
+    print(f"Loads pulled: {len(loads)}")
     #loads.to_csv('carrier_data.csv')
 
     return loads
@@ -299,7 +390,8 @@ def plot_clusters(data):
     origin_g = origin_geo_data.plot(ax=ax, color=origin_geo_data['color'], alpha=0.5, marker="o")
     destination_g = destination_geo_data.plot(ax=ax, color=destination_geo_data['color'], alpha=0.5, marker=">") 
 
-    print(geo_cluster_metadata.sort_values(by="lanes_in_cluster",ascending=False)[['cluster','lanes_in_cluster', 'num_carriers', 'avg_mileage','origin_city', 'origin_state', 'destination_city', 'destination_state', "avg_customer_rpm", "avg_truck_rpm"]])
+    df = geo_cluster_metadata.sort_values(by="lanes_in_cluster",ascending=False)[['cluster','lanes_in_cluster', 'num_carriers', 'avg_mileage','origin_city', 'origin_state', 'destination_city', 'destination_state', "avg_customer_rpm", "avg_truck_rpm"]]
+    print(df)
     geo_cluster_metadata.sort_values(by="lanes_in_cluster",ascending=False)[['cluster','lanes_in_cluster', 'num_carriers', 'avg_mileage','origin_city', 'origin_state', 'destination_city', 'destination_state', "avg_customer_rpm", "avg_truck_rpm"]].to_csv("van_lanes.csv")
     geo_data.to_csv("loads_per_cluster.csv")
     #print(geo_data)
